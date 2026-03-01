@@ -24,7 +24,7 @@ namespace BestBotOfSOGU
             foreach (var game in Games)
             {
                 // инициализация игры
-                game.Init(Users, bot);
+                game.Init(bot);
                 game.EndGame += ToStartScrin;
             }
             bot.OnUpdate += Bot_OnUpdate;
@@ -124,11 +124,11 @@ namespace BestBotOfSOGU
     public class User(long id, string? userName)
     {
         // Id юзера совподает с Id чата юзера
-        public long Id = id;
+        public long Id { get; internal set; } = id;
         // юзернейм в тг
-        public string? UserName = userName;
+        public string? UserName { get; internal set; } = userName;
         // текущая игра если null то юзер находится на стартовом сообщении
-        public Games? CurentGame;
+        public Games? CurentGame { get; internal set; }
         // удобный конструктор
         public User(Telegram.Bot.Types.Chat chat) : this(chat.Id, chat.Username) { }
         // переопределения сравнителя позволяет сравнивать юзеров по Id и сравнивать юзеров с числави
@@ -148,8 +148,8 @@ namespace BestBotOfSOGU
     {
         // информация о игре содержит то что бот выводит на стартовом экране для выбора игры а также название игры из enum Games
         public GameInfo Info { get; }
-        // эта функция вызывается из мейна при запуске бота и передаёт список игроков и бота
-        void Init(Dictionary<long, User> users, TelegramBotClient bot) { }
+        // эта функция вызывается из мейна при запуске бота
+        void Init(TelegramBotClient bot) { }
         // запускается когда игрок user выберает эту игру
         void Start(User user) { }
         // запускается когда игрок принудитльно покидает эту игру, может быть вызван даже если игрок в эту игру в текущий момент не играет
