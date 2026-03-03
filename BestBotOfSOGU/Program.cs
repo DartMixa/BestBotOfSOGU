@@ -97,7 +97,7 @@ namespace BestBotOfSOGU
                 {
                     if (game.Info.gameType == CurentUser.CurentGame)
                     {
-                        game.Update(CurentUser, update);
+                        await game.Update(CurentUser, update);
                         break;
                     }
                 }
@@ -151,11 +151,11 @@ namespace BestBotOfSOGU
         // эта функция вызывается из мейна при запуске бота
         void Init(TelegramBotClient bot) { }
         // запускается когда игрок user выберает эту игру
-        void Start(User user) { }
+        Task Start(User user);
         // запускается когда игрок принудитльно покидает эту игру, может быть вызван даже если игрок в эту игру в текущий момент не играет
         void Break(User user) { }
         // во время игры передаёт игре update игрока
-        void Update(User user, Update update) { }
+        Task Update(User user, Update update);
         // вызовите это событие при завершении игры, чтобы бот вернул игрока на главный экран
         event Action<User> EndGame;
     }
