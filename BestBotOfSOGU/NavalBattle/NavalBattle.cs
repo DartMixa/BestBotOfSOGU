@@ -1,129 +1,169 @@
-﻿using Telegram.Bot;
+﻿using BestBotOfSOGU;
+using Telegram.Bot;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.ReplyMarkups;
+using static System.Net.Mime.MediaTypeNames;
 using Image = System.Drawing.Image;
+using User = BestBotOfSOGU.User;
 
 namespace NavalBattle
 {
-    static class NavalBattle : IGame
+    class NavalBattle : IGame
     {
         static public TelegramBotClient bot;
         static public Dictionary<User, UserSession> Users = [];
         static public Dictionary<int, Room> LockedRooms = [];
         static public Dictionary<int, Room> OpenRooms = [];
-        private static async Task Bot_OnUpdate(Telegram.Bot.Types.Update update)
-        {
-            var CurentUserId = update.CallbackQuery.Message.Chat.Id;
-            var CurentUser = Users[CurentUserId];
-            if (CurentUser.State is UserStateInMainMenu stateInMainMenu)
-            {
-                switch (update.CallbackQuery.Data)
-                {
-                    case "Создать игру":
-                        var mess = await bot.EditMessageText(CurentUser.Id, stateInMainMenu.LastMessageId, "Придумайте пароль", replyMarkup: InlineKeyboardButton.WithCallbackData("Назад", "Назад"));
-                        var room = new Room(CurentUser);
-                        CurentUser.State = new UserStateCreatingRoom(mess.Id, room);
-                        break;
-                    case "Найти игру":
-                        mess = await bot.EditMessageText(CurentUser.Id, stateInMainMenu.LastMessageId, "Введите номер комнаты", replyMarkup: InlineKeyboardButton.WithCallbackData("Назад", "Назад"));
-                        CurentUser.State = new UserStateSelectRoomToConnect(mess.Id);
-                        break;
-                    default: break;
-                }
-            }
-            else if (CurentUser.State is UserStateCreatingRoom stateCreatingRoom)
-            {
-                await bot.DeleteMessages(CurentUser.Id, [stateCreatingRoom.LastMessageId]);
-                var mess = await SendHomeMessage(CurentUser, "давай играть в морской бой");
-                CurentUser.State = new UserStateInMainMenu(mess.Id);
-            }
-            else if (CurentUser.State is UserStateSelectRoomToConnect stateSelectRoomToConnect)
-            {
-                await bot.DeleteMessages(CurentUser.Id, [stateSelectRoomToConnect.LastMessageId]);
-                var mess = await SendHomeMessage(CurentUser, "давай играть в морской бой");
-                CurentUser.State = new UserStateInMainMenu(mess.Id);
-            }
-            else if (CurentUser.State is UserStateConnectingToRoom stateConnectingToRoom)
-            {
-                await bot.DeleteMessages(CurentUser.Id, [stateConnectingToRoom.LastMessageId]);
-                var mess = await SendHomeMessage(CurentUser, "давай играть в морской бой");
-                CurentUser.State = new UserStateInMainMenu(mess.Id);
-            }
-            else if (CurentUser.State is UserStateInRoom stateInRoom) 
-            {
-                stateInRoom.CurentRoom.RoomOnUpdate(CurentUser, update);
-            }
-        }
-        private static async Task Bot_OnMessage(Telegram.Bot.Types.Message message, Telegram.Bot.Types.Enums.UpdateType type)
-        {
-            var CurentUserId = message.Chat.Id;
 
-            if (!Users.ContainsKey(CurentUserId)) Users[CurentUserId] = new UserSession(message.Chat);
+        public event Action<User> EndGame;
 
-            var CurentUser = Users[CurentUserId];
+        public GameInfo info = new("Морской бой", "Морской бой", Games.NavalBattle);
+        public GameInfo Info => info;
 
-            if (message.Text == "/start")
-            {
-                Console.WriteLine(message.Chat.Username);
-                await bot.DeleteMessages(CurentUser.Id, [message.Id]);
-                var mess = await SendHomeMessage(CurentUser, "давай играть в морской бой");
-                CurentUser.State = new UserStateInMainMenu(mess.Id);
-            }
-            else if (CurentUser.State is UserStateCreatingRoom stateCreatingRoom)
-            {
-                stateCreatingRoom.CreateRoom.passvord = message.Text;
-                await bot.DeleteMessages(CurentUser.Id, [stateCreatingRoom.LastMessageId, message.Id]);
-                CurentUser.State = new UserStateInRoom(stateCreatingRoom.CreateRoom);
-                LockedRooms[stateCreatingRoom.CreateRoom.Id] = stateCreatingRoom.CreateRoom;
-                await stateCreatingRoom.CreateRoom.SendUpdateRoomMessage();
-
-            }
-            else if (CurentUser.State is UserStateSelectRoomToConnect stateSelectRoomToConnect)
-            {
-                if (int.TryParse(message.Text, out var roomId) && LockedRooms.ContainsKey(roomId))
-                {
-                    await bot.DeleteMessages(CurentUser.Id, [message.Id]);
-                    var mess = await bot.EditMessageText(CurentUser.Id, stateSelectRoomToConnect.LastMessageId, "Введите пароль", replyMarkup: InlineKeyboardButton.WithCallbackData("Назад", "Назад"));
-                    CurentUser.State = new UserStateConnectingToRoom(mess.Id, LockedRooms[roomId]);
-                }
-                else 
-                {
-                    await bot.SendMessage(CurentUser.Id, "Такой комноты нет");
-                    await bot.DeleteMessages(CurentUser.Id, [stateSelectRoomToConnect.LastMessageId, message.Id]);
-                    var mess = await SendHomeMessage(CurentUser, "давай играть в морской бой");
-                    CurentUser.State = new UserStateInMainMenu(mess.Id);
-                }
-            }
-            else if (CurentUser.State is UserStateConnectingToRoom stateConnectingToRoom)
-            {
-                if (stateConnectingToRoom.CurentRoom.ConnectWithPassword(CurentUser, message.Text))
-                {
-                    await bot.DeleteMessages(CurentUser.Id, [stateConnectingToRoom.LastMessageId, message.Id]);
-                    CurentUser.State = new UserStateInRoom(stateConnectingToRoom.CurentRoom);
-                    LockedRooms.Remove(stateConnectingToRoom.CurentRoom.Id);
-                    await stateConnectingToRoom.CurentRoom.SendUpdateRoomMessage();
-                }
-                else
-                {
-                    await bot.SendMessage(CurentUser.Id, "Это не правельный пароль");
-                    await bot.DeleteMessages(CurentUser.Id, [stateConnectingToRoom.LastMessageId, message.Id]);
-                    var mess = await SendHomeMessage(CurentUser, "давай играть в морской бой");
-                    CurentUser.State = new UserStateInMainMenu(mess.Id);
-                }
-            }
-            else if (CurentUser.State is UserStateInRoom stateInRoom)
-            {
-                stateInRoom.CurentRoom.RoomOnMessage(CurentUser, message);
-            }
-        }
-        public static async Task<Message> SendHomeMessage(UserSession CurentUser, string text)
+        public static async Task<Message> SendHomeMessage(UserSession CurentUserSession, string text)
         {
             var markup = new InlineKeyboardButton[][]
                     {
                         [InlineKeyboardButton.WithCallbackData("Создать игру", "Создать игру"),
                         InlineKeyboardButton.WithCallbackData("Найти игру", "Найти игру")],
                     };
-            return await bot.SendMessage(CurentUser.Id, text, replyMarkup: markup);
+            return await bot.SendMessage(CurentUserSession.user.Id, text, replyMarkup: markup);
+        }
+
+        public async Task Start(User user)
+        {
+            Users[user] = new(user);
+            Users[user].LastMessageId = (await SendHomeMessage(Users[user], "давай играть в морской бой")).Id;
+            Users[user].State = UserState.UserStateInMainMenu;
+        }
+
+        public async Task Update(User user, Update update)
+        {
+            var curentUserSession = Users[user];
+            switch (curentUserSession.State)
+            {
+                case UserState.UserStateDefoult:
+                    break;
+                case UserState.UserStateInMainMenu:
+                    if (update.CallbackQuery?.Data is not null)
+                    {
+                        switch (update.CallbackQuery.Data)
+                        {
+                            case "Создать игру":
+                                var mess = await bot.EditMessageText(curentUserSession.user.Id, (int)curentUserSession.LastMessageId, "Придумайте пароль", replyMarkup: InlineKeyboardButton.WithCallbackData("Назад", "Назад"));
+                                var room = new Room(curentUserSession);
+                                curentUserSession.State = UserState.UserStateCreatingRoom;
+                                curentUserSession.LastMessageId = mess.Id;
+                                curentUserSession.CurentRoom = room;
+                                break;
+                            case "Найти игру":
+                                mess = await bot.EditMessageText(curentUserSession.user.Id, (int)curentUserSession.LastMessageId, "Введите номер комнаты", replyMarkup: InlineKeyboardButton.WithCallbackData("Назад", "Назад"));
+                                curentUserSession.State = UserState.UserStateSelectRoomToConnect;
+                                curentUserSession.LastMessageId = mess.Id;
+                                break;
+                            default: break;
+                        }
+                    }
+                    break;
+                case UserState.UserStateCreatingRoom:
+                    if (update.Message?.Text is not null)
+                    {
+                        curentUserSession.CurentRoom.passvord = update.Message.Text;
+                        await bot.DeleteMessages(curentUserSession.user.Id, [(int)curentUserSession.LastMessageId, update.Message.Id]);
+                        curentUserSession.State = UserState.UserStateInRoom;
+                        LockedRooms[curentUserSession.CurentRoom.Id] = curentUserSession.CurentRoom;
+                        await curentUserSession.CurentRoom.SendUpdateRoomMessage();
+                    }
+                    break;
+                case UserState.UserStateInRoom:
+                    if (update.CallbackQuery is not null) 
+                    {
+                        await curentUserSession.CurentRoom.RoomOnUpdate(curentUserSession, update);
+                    }
+                    if (update.Message is not null) 
+                    {
+                        await curentUserSession.CurentRoom.RoomOnMessage(curentUserSession, update.Message);
+                    }
+                    break;
+                case UserState.UserStateSelectRoomToConnect:
+                    if (update.Message?.Text is not null) 
+                    {
+                        if (int.TryParse(update.Message.Text, out var roomId) && LockedRooms.ContainsKey(roomId))
+                        {
+                            await bot.DeleteMessages(curentUserSession.user.Id, [update.Message.Id]);
+                            var mess = await bot.EditMessageText(curentUserSession.user.Id, (int)curentUserSession.LastMessageId, "Введите пароль", replyMarkup: InlineKeyboardButton.WithCallbackData("Назад", "Назад"));
+                            curentUserSession.LastMessageId = mess.Id;
+                            curentUserSession.CurentRoom = LockedRooms[roomId];
+                            curentUserSession.State = UserState.UserStateConnectingToRoom;
+                        }
+                        else
+                        {
+                            await bot.SendMessage(curentUserSession.user.Id, "Такой комноты нет");
+                            await bot.DeleteMessages(curentUserSession.user.Id, [(int)curentUserSession.LastMessageId, update.Message.Id]);
+                            var mess = await SendHomeMessage(curentUserSession, "давай играть в морской бой");
+                            curentUserSession.State = UserState.UserStateInMainMenu;
+                            curentUserSession.LastMessageId = mess.Id;
+                            curentUserSession.CurentRoom = null;
+                        }
+                    }
+                    break;
+                case UserState.UserStateConnectingToRoom:
+                    if (update.Message?.Text is not null)
+                    {
+                        if (curentUserSession.CurentRoom.ConnectWithPassword(curentUserSession, update.Message.Text))
+                        {
+                            await bot.DeleteMessages(curentUserSession.user.Id, [(int)curentUserSession.LastMessageId, update.Message.Id]);
+                            curentUserSession.State = UserState.UserStateInRoom;
+                            LockedRooms.Remove(curentUserSession.CurentRoom.Id);
+                            await curentUserSession.CurentRoom.SendUpdateRoomMessage();
+                        }
+                        else
+                        {
+                            await bot.SendMessage(curentUserSession.user.Id, "Это не правельный пароль");
+                            await bot.DeleteMessages(curentUserSession.user.Id, [(int)curentUserSession.LastMessageId, update.Message.Id]);
+                            var mess = await SendHomeMessage(curentUserSession, "давай играть в морской бой");
+                            curentUserSession.State = UserState.UserStateInMainMenu;
+                            curentUserSession.LastMessageId = mess.Id;
+                            curentUserSession.CurentRoom = null;
+                        }
+                    }
+                    break;
+                default:
+                    break;
+            }
+            if (update.CallbackQuery?.Data is not null && update.CallbackQuery?.Data == "Назад")
+            {
+                await bot.DeleteMessages(curentUserSession.user.Id, [(int)curentUserSession.LastMessageId]);
+                var mess = await SendHomeMessage(curentUserSession, "давай играть в морской бой");
+                curentUserSession.State = UserState.UserStateInMainMenu;
+                curentUserSession.LastMessageId = mess.Id;
+                curentUserSession.CurentRoom = null;
+            }
+        }
+
+        public async Task Break(User user)
+        {
+            if (Users.ContainsKey(user))
+            {
+                var curentUserSession = Users[user];
+                if (curentUserSession.CurentRoom is not null)
+                {
+                    if (curentUserSession.State == UserState.UserStateInRoom && curentUserSession.CurentRoom.SecondUser is not null)
+                    {
+                        await bot.SendMessage(curentUserSession.CurentRoom.SecondUser.user.Id, "Противник покинул игру");
+                        var mess = await SendHomeMessage(curentUserSession, "давай играть в морской бой");
+                        curentUserSession.State = UserState.UserStateInMainMenu;
+                        curentUserSession.LastMessageId = mess.Id;
+                        curentUserSession.CurentRoom = null;
+                    }
+                }
+                Users.Remove(user);
+            }
+        }
+
+        public void Init(TelegramBotClient bot)
+        {
+            NavalBattle.bot = bot;
         }
     }
     public class UserSession(User user)
@@ -169,7 +209,7 @@ namespace NavalBattle
         Field? fieldSecondUser;
         UserSession? Move;
 
-        public string Name { get { return $"Комнота {Owner.UserName} № {Id}"; } }
+        public string Name { get { return $"Комнота {Owner.user.UserName} № {Id}"; } }
         public bool Connect(UserSession user)
         {
             if (SecondUser is null)
@@ -198,24 +238,24 @@ namespace NavalBattle
             if (SecondUser is null)
             {
                 if (OwnerRoomMessageId is null)
-                    OwnerRoomMessageId = (await Program.bot.SendMessage(Owner.Id, text)).Id;
-                else await Program.bot.EditMessageText(Owner.Id, (int)OwnerRoomMessageId, text);
+                    OwnerRoomMessageId = (await NavalBattle.bot.SendMessage(Owner.user.Id, text)).Id;
+                else await NavalBattle.bot.EditMessageText(Owner.user.Id, (int)OwnerRoomMessageId, text);
             }
 
             else
             {
                 if (OwnerRoomMessageId is null)
-                    OwnerRoomMessageId = (await Program.bot.SendMessage(Owner.Id, text)).Id;
-                else await Program.bot.EditMessageText(Owner.Id, (int)OwnerRoomMessageId, text, replyMarkup: InlineKeyboardButton.WithCallbackData("Начать", "Начать"));
+                    OwnerRoomMessageId = (await NavalBattle.bot.SendMessage(Owner.user.Id, text)).Id;
+                else await NavalBattle.bot.EditMessageText(Owner.user.Id, (int)OwnerRoomMessageId, text, replyMarkup: InlineKeyboardButton.WithCallbackData("Начать", "Начать"));
 
                 if (SecondUserRoomMessageId is null)
-                    SecondUserRoomMessageId = (await Program.bot.SendMessage(SecondUser.Id, text)).Id;
-                else await Program.bot.EditMessageText(SecondUser.Id, (int)SecondUserRoomMessageId, text);
+                    SecondUserRoomMessageId = (await NavalBattle.bot.SendMessage(SecondUser.user.Id, text)).Id;
+                else await NavalBattle.bot.EditMessageText(SecondUser.user.Id, (int)SecondUserRoomMessageId, text);
             }
         }
         public string CriateRoomMessageText()
         {
-            string text = $"Название комнаты: {Name} \nИгроки: \n{Owner.UserName}\nvs\n{((SecondUser is not null) ? SecondUser.UserName : "Ожидание игрока")}";
+            string text = $"Название комнаты: {Name} \nИгроки: \n{Owner.user.UserName}\nvs\n{((SecondUser is not null) ? SecondUser.user.UserName : "Ожидание игрока")}";
             return text;
         }
         public async Task RoomOnUpdate(UserSession CurentUser, Telegram.Bot.Types.Update update)
@@ -229,7 +269,7 @@ namespace NavalBattle
         }
         public async Task RoomOnMessage(UserSession CurentUser, Telegram.Bot.Types.Message message)
         {
-            await Program.bot.DeleteMessages(CurentUser.Id, [message.Id]);
+            await Program.bot.DeleteMessages(CurentUser.user.Id, [message.Id]);
             if (state == RoomState.ArrangeShips)
             {
                 var text = GenerateArrangeShipMessageText();
@@ -255,7 +295,7 @@ namespace NavalBattle
                 {
                     text = "Расстановка кораблей завершина, ожидание соперника";
                 }
-                UpdateFieldMassage(Program.bot, CurentUser, field, (int)(CurentUser == Owner ? OwnerRoomMessageId : SecondUserRoomMessageId), text);
+                UpdateFieldMassage(NavalBattle.bot, CurentUser, field, (int)(CurentUser == Owner ? OwnerRoomMessageId : SecondUserRoomMessageId), text);
                 if (fieldOwner.Ready && fieldSecondUser.Ready)
                 {
                     state = RoomState.Batle;
@@ -282,8 +322,8 @@ namespace NavalBattle
                             {
                                 if (field.AliveShips == 0) 
                                 {
-                                    await Program.bot.DeleteMessages(Owner.Id, [(int)OwnerRoomMessageId]);
-                                    await Program.bot.DeleteMessages(SecondUser.Id, [(int)SecondUserRoomMessageId]);
+                                    await NavalBattle.bot.DeleteMessages(Owner.user.Id, [(int)OwnerRoomMessageId]);
+                                    await NavalBattle.bot.DeleteMessages(SecondUser.user.Id, [(int)SecondUserRoomMessageId]);
                                     OwnerRoomMessageId = null;
                                     SecondUserRoomMessageId = null;
                                     SendUpdateRoomMessage();
@@ -311,9 +351,9 @@ namespace NavalBattle
         {
             var text = GenerateArrangeShipMessageText();
 
-            await UpdateFieldMassage(Program.bot, Owner, fieldOwner, (int)OwnerRoomMessageId, text);
+            await UpdateFieldMassage(NavalBattle.bot, Owner, fieldOwner, (int)OwnerRoomMessageId, text);
 
-            await UpdateFieldMassage(Program.bot, SecondUser, fieldSecondUser, (int)SecondUserRoomMessageId, text);
+            await UpdateFieldMassage(NavalBattle.bot, SecondUser, fieldSecondUser, (int)SecondUserRoomMessageId, text);
         }
         public async Task UpdateFieldMassage(ITelegramBotClient botClient, UserSession user, Field field, int messageToUpdate, string text)
         {
@@ -326,7 +366,7 @@ namespace NavalBattle
                 var inputFile = new InputFileStream(stream, "field.png");
                 var inputMedia = new InputMediaPhoto(inputFile) { Caption = text };
 
-                await botClient.EditMessageMedia(user.Id, messageToUpdate, inputMedia);
+                await botClient.EditMessageMedia(user.user.Id, messageToUpdate, inputMedia);
             }
         }
         public async Task Update2FieldMassage(ITelegramBotClient botClient, UserSession user, Field field1, Field field2, int messageToUpdate, string text)
@@ -340,7 +380,7 @@ namespace NavalBattle
                 var inputFile = new InputFileStream(stream, "field.png");
                 var inputMedia = new InputMediaPhoto(inputFile) { Caption = text };
 
-                await botClient.EditMessageMedia(user.Id, messageToUpdate, inputMedia);
+                await botClient.EditMessageMedia(user.user.Id, messageToUpdate, inputMedia);
             }
         }
         public string GenerateArrangeShipMessageText() 
@@ -355,9 +395,9 @@ namespace NavalBattle
         }
         public async Task UpdateBattle(string text = "")
         {
-            await Update2FieldMassage(Program.bot, Owner, fieldOwner, fieldSecondUser, (int)OwnerRoomMessageId, Owner == Move ? "Ваш ход, введите координаты" + text : "Ход противника");
+            await Update2FieldMassage(NavalBattle.bot, Owner, fieldOwner, fieldSecondUser, (int)OwnerRoomMessageId, Owner == Move ? "Ваш ход, введите координаты" + text : "Ход противника");
 
-            await Update2FieldMassage(Program.bot, SecondUser, fieldSecondUser, fieldOwner, (int)SecondUserRoomMessageId, SecondUser == Move ? "Ваш ход, введите координаты" + text : "Ход противника");
+            await Update2FieldMassage(NavalBattle.bot, SecondUser, fieldSecondUser, fieldOwner, (int)SecondUserRoomMessageId, SecondUser == Move ? "Ваш ход, введите координаты" + text : "Ход противника");
         }
     }
 }

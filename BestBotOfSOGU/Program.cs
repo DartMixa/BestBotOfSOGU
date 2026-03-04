@@ -1,7 +1,9 @@
-﻿using System.Xml.Linq;
+﻿using System.Security.AccessControl;
+using System.Xml.Linq;
 using Telegram.Bot;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.ReplyMarkups;
+using NavalBattle;
 
 // В тексте комментариев много синтаксических ошибок)))
 namespace BestBotOfSOGU
@@ -12,7 +14,7 @@ namespace BestBotOfSOGU
         //Основной список юзеров, который передаётся в каждую игру
         static public Dictionary<long, User> Users = [];
         //Список всех игр в боте, чтобы добавить игру просто допишите её в список
-        static public List<IGame> Games = [];
+        static public List<IGame> Games = [new NavalBattle.NavalBattle()];
         //токен бота
         private readonly static string Token = "8225210157:AAE2UPEDXliKC3sOn1lr3laZA3WgzfT7E7o";
         // собственно сам бот он передаётся в каждую игру
@@ -64,7 +66,7 @@ namespace BestBotOfSOGU
                     //завершение работы всех игр (даже если они не работают с этим юзером)
                     foreach (var game in Games)
                     {
-                        game.Break(CurentUser);
+                        await game.Break(CurentUser);
                     }
                     // очистка текущей игры юзера
                     CurentUser.CurentGame = null;
@@ -84,7 +86,7 @@ namespace BestBotOfSOGU
                             // делаем эту игру текущей
                             CurentUser.CurentGame = game.Info.gameType;
                             // запускаем игру для текущего юзера
-                            game.Start(CurentUser);
+                            await game.Start(CurentUser);
                             break;
                         }
                     }
@@ -118,7 +120,7 @@ namespace BestBotOfSOGU
     // список игр который будет использоваться для определения текущей игры
     public enum Games
     {
-        
+        NavalBattle,
     }
     // это класс User он используется для получения основной информации о юзере !!!ОН НЕ ХРАНИТ ИНФОРМАЦИЮ ИГР!!!
     public class User(long id, string? userName)
@@ -149,24 +151,24 @@ namespace BestBotOfSOGU
         // информация о игре содержит то что бот выводит на стартовом экране для выбора игры а также название игры из enum Games
         public GameInfo Info { get; }
         // эта функция вызывается из мейна при запуске бота
-        void Init(TelegramBotClient bot) { }
+        void Init(TelegramBotClient bot);
         // запускается когда игрок user выберает эту игру
         Task Start(User user);
         // запускается когда игрок принудитльно покидает эту игру, может быть вызван даже если игрок в эту игру в текущий момент не играет
-        void Break(User user) { }
+        Task Break(User user);
         // во время игры передаёт игре update игрока
         Task Update(User user, Update update);
         // вызовите это событие при завершении игры, чтобы бот вернул игрока на главный экран
         event Action<User> EndGame;
     }
     // здесь информация о игре
-    public class GameInfo(string name, string callbackData)
+    public class GameInfo(string name, string callbackData, Games gameType)
     {
         // это будет выведено на стартовый экран внутри инлайна для выбора игры
         public string gameName = name;
         // это колбек который будет привязан к инлайну
         public string CallbackData = callbackData;
         // это то что будет у игрока в CurentGame при выборе этой игры
-        public Games gameType;
+        public Games gameType = gameType;
     }
 }
