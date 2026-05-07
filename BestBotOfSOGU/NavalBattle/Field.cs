@@ -291,6 +291,7 @@ namespace NavalBattle
 
         private void CheckIfShipSunk(int x, int y)
         {
+            #region мишалох
             var shipCells = new List<(int x, int y)>();
 
             void SearchShip(int startX, int startY)
@@ -309,7 +310,8 @@ namespace NavalBattle
                         else if (val != 2 && val != 3 && dx > 0)
                             break;
                     }
-                }
+                } 
+                #endregion
 
                 for (int dy = -3; dy <= 3; dy++)
                 {
