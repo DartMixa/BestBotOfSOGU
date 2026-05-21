@@ -14,7 +14,7 @@ namespace BestBotOfSOGU
         //Основной список юзеров, который передаётся в каждую игру
         static public Dictionary<long, User> Users = [];
         //Список всех игр в боте, чтобы добавить игру просто допишите её в список
-        static public List<IGame> Games = [new NavalBattle.NavalBattle()];
+        static public List<IMGAY> Games = [new NavalBattle.NavalBattle()];
         //токен бота
         private readonly static string Token = "8225210157:AAE2UPEDXliKC3sOn1lr3laZA3WgzfT7E7o";
         // собственно сам бот он передаётся в каждую игру
@@ -146,7 +146,7 @@ namespace BestBotOfSOGU
             return Id.GetHashCode();
         }
     }
-    public interface IGame 
+    public interface IMGAY 
     {
         // информация о игре содержит то что бот выводит на стартовом экране для выбора игры а также название игры из enum Games
         public GameInfo Info { get; }

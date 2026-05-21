@@ -8,7 +8,7 @@ using User = BestBotOfSOGU.User;
 
 namespace NavalBattle
 {
-    class NavalBattle : IGame
+    class NavalBattle : IMGAY
     {
         static public TelegramBotClient bot;
         static public Dictionary<User, UserSession> Users = [];
